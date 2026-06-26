@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, CheckCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, CheckCircle, Loader2, Trash2 } from 'lucide-react';
 
 const Navbar = () => {
   const fileInputRef = useRef(null);
@@ -31,13 +31,10 @@ const Navbar = () => {
           setErrorMessage(data.error);
         } else {
           setUploadStatus('success');
-          // Clear chat when new PDF is uploaded
-          sessionStorage.removeItem('chat_messages');
-          // We don't reload the page immediately to let user see success, 
-          // but we will reload after 1.5s
+          // Reset to idle after a few seconds so they can upload again
           setTimeout(() => {
-            window.location.reload();
-          }, 1500);
+            setUploadStatus('idle');
+          }, 3000);
         }
       })
       .catch((err) => {
@@ -51,6 +48,15 @@ const Navbar = () => {
       });
   };
 
+  const handleClear = () => {
+    fetch('/clear', { method: 'POST' })
+      .then(() => {
+        sessionStorage.removeItem('chat_messages');
+        window.location.reload();
+      })
+      .catch(console.error);
+  };
+
   return (
     <nav className="flex justify-between items-center px-8 py-4 bg-gray-900 text-white border-b border-gray-800">
       <div className="flex items-center gap-3">
@@ -60,7 +66,7 @@ const Navbar = () => {
       
       <div className="flex gap-4 items-center">
         {uploadStatus === 'error' && <span className="text-red-400 text-sm">{errorMessage}</span>}
-        {uploadStatus === 'success' && <span className="text-green-400 text-sm flex items-center gap-1"><CheckCircle size={16}/> Uploaded</span>}
+        {uploadStatus === 'success' && <span className="text-green-400 text-sm flex items-center gap-1"><CheckCircle size={16}/> Added to KB</span>}
         
         <input
           type="file"
@@ -78,18 +84,15 @@ const Navbar = () => {
           {uploadStatus === 'uploading' ? (
             <><Loader2 className="animate-spin" size={16} /> Processing...</>
           ) : (
-            <><UploadCloud size={16} /> Upload PDF</>
+            <><UploadCloud size={16} /> Add PDF</>
           )}
         </button>
 
         <button
-          className="px-4 py-2 bg-gray-800 text-red-400 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700 text-sm font-medium"
-          onClick={() => {
-            sessionStorage.removeItem('chat_messages');
-            window.location.reload();
-          }}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-red-400 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700 text-sm font-medium"
+          onClick={handleClear}
         >
-          Clear Chat
+          <Trash2 size={16} /> Clear KB
         </button>
       </div>
     </nav>

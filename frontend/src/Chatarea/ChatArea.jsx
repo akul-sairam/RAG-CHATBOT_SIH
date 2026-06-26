@@ -1,6 +1,59 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Send, User, Bot, AlertCircle } from 'lucide-react';
+import { Send, User, Bot, AlertCircle, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+
+const BotMessage = ({ msg }) => {
+  const [showSources, setShowSources] = useState(false);
+
+  return (
+    <div className="flex gap-4 max-w-4xl w-full self-start">
+      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1 bg-gray-700">
+        <Bot size={18} className="text-cyan-400" />
+      </div>
+      <div className="flex flex-col gap-2 max-w-[80%]">
+        <div
+          className={`px-5 py-4 rounded-2xl text-[15px] leading-relaxed w-full ${
+            msg.isError 
+              ? 'bg-red-900/50 text-red-200 border border-red-800 rounded-tl-sm'
+              : 'bg-gray-800/80 text-gray-200 rounded-tl-sm shadow-sm border border-gray-700/50'
+          }`}
+        >
+          {!msg.isError ? (
+            <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 max-w-none">
+              <ReactMarkdown>{msg.text}</ReactMarkdown>
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap">{msg.text}</div>
+          )}
+        </div>
+        
+        {msg.sources && msg.sources.length > 0 && (
+          <div className="mt-1">
+            <button 
+              onClick={() => setShowSources(!showSources)}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-cyan-400 transition-colors"
+            >
+              <BookOpen size={14} />
+              {showSources ? 'Hide Sources' : `View Sources (${msg.sources.length})`}
+              {showSources ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            
+            {showSources && (
+              <div className="mt-3 flex flex-col gap-3">
+                {msg.sources.map((source, idx) => (
+                  <div key={idx} className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm">
+                    <div className="text-cyan-500 font-medium mb-1 text-xs">Source: {source.source}</div>
+                    <div className="text-gray-300 italic">"...{source.content}..."</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const ChatArea = () => {
   const defaultMessages = [
@@ -43,7 +96,7 @@ const ChatArea = () => {
         setMessages((msgs) => {
           let updated;
           if (data.response) {
-            updated = [...msgs, { text: data.response, sender: 'bot' }];
+            updated = [...msgs, { text: data.response, sender: 'bot', sources: data.sources }];
           } else {
             updated = [...msgs, { text: data.error || 'Error: No response from server.', sender: 'bot', isError: true }];
           }
@@ -65,31 +118,18 @@ const ChatArea = () => {
     <div className="w-full flex-1 flex flex-col bg-gray-950">
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-24 py-8 flex flex-col gap-6">
         {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex gap-4 max-w-4xl w-full ${msg.sender === 'user' ? 'self-end flex-row-reverse' : 'self-start'}`}
-          >
-            <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1 ${msg.sender === 'user' ? 'bg-cyan-600' : 'bg-gray-700'}`}>
-              {msg.sender === 'user' ? <User size={18} className="text-white" /> : <Bot size={18} className="text-cyan-400" />}
-            </div>
-            <div
-              className={`px-5 py-4 rounded-2xl text-[15px] leading-relaxed max-w-[80%] ${
-                msg.sender === 'user'
-                  ? 'bg-cyan-600 text-white rounded-tr-sm'
-                  : msg.isError 
-                    ? 'bg-red-900/50 text-red-200 border border-red-800 rounded-tl-sm'
-                    : 'bg-gray-800/80 text-gray-200 rounded-tl-sm shadow-sm border border-gray-700/50'
-              }`}
-            >
-              {msg.sender === 'bot' && !msg.isError ? (
-                <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700">
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
-                </div>
-              ) : (
+          msg.sender === 'user' ? (
+            <div key={idx} className="flex gap-4 max-w-4xl w-full self-end flex-row-reverse">
+              <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1 bg-cyan-600">
+                <User size={18} className="text-white" />
+              </div>
+              <div className="px-5 py-4 rounded-2xl text-[15px] leading-relaxed max-w-[80%] bg-cyan-600 text-white rounded-tr-sm">
                 <div className="whitespace-pre-wrap">{msg.text}</div>
-              )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <BotMessage key={idx} msg={msg} />
+          )
         ))}
         {loading && (
           <div className="flex gap-4 max-w-4xl w-full self-start">

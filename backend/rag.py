@@ -33,6 +33,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Global state
 qa_chain = None
+vectorstore = None
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
@@ -42,7 +44,7 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    global qa_chain
+    global qa_chain, vectorstore, memory
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     
@@ -62,21 +64,29 @@ def upload_file():
             if not docs:
                 return jsonify({"error": "No documents could be loaded from the PDF."}), 400
             
+            # Add metadata for citations
+            for doc in docs:
+                doc.metadata["source"] = filename
+
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
             chunks = text_splitter.split_documents(docs)
             
-            vectorstore = FAISS.from_documents(chunks, embeddings)
+            if vectorstore is None:
+                vectorstore = FAISS.from_documents(chunks, embeddings)
+            else:
+                vectorstore.add_documents(chunks)
+                
             retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
             
-            # Initialize conversational chain with memory
-            memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+            # Re-initialize conversational chain with existing memory but new retriever
             qa_chain = ConversationalRetrievalChain.from_llm(
                 llm=llm,
                 retriever=retriever,
-                memory=memory
+                memory=memory,
+                return_source_documents=True
             )
             
-            return jsonify({"message": f"Successfully processed {filename}"}), 200
+            return jsonify({"message": f"Successfully added {filename} to knowledge base"}), 200
         except Exception as e:
             return jsonify({"error": f"Error processing PDF: {str(e)}"}), 500
     else:
@@ -95,7 +105,44 @@ def ask():
         
     try:
         response = qa_chain({"question": query})
-        return jsonify({"response": response["answer"]})
+        
+        # Extract sources
+        sources = []
+        if "source_documents" in response:
+            for doc in response["source_documents"]:
+                sources.append({
+                    "content": doc.page_content,
+                    "source": doc.metadata.get("source", "Unknown PDF"),
+                    "page": doc.metadata.get("page", 0)
+                })
+                
+        return jsonify({
+            "response": response["answer"],
+            "sources": sources
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/clear", methods=["POST"])
+def clear():
+    global qa_chain, vectorstore, memory
+    try:
+        qa_chain = None
+        vectorstore = None
+        memory.clear()
+        
+        # Clear uploads folder
+        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                pass
+                
+        return jsonify({"message": "Knowledge base cleared successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
